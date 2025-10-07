@@ -378,7 +378,7 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
 }
 
 int main() {
-    switch (9) {
+    switch (10) {
         case 1: bouncing_spheres();  break;
         case 2: checkered_spheres(); break;
         case 3: earth();             break;
@@ -387,7 +387,7 @@ int main() {
         case 6: simple_light();      break;
         case 7: cornell_box();       break;
         case 8: cornell_smoke();     break;
-        case 9:  final_scene(800, 10000, 40); break;
-        default: final_scene(400,   250,  4); break;
+        case 9:  final_scene(800, 1000, 40); break; //super high res
+        case 10: final_scene(400,   250,  4); break; //not as high res
     }
 }
