@@ -7,6 +7,7 @@
 #include "texture.h"
 #include "quad.h"
 #include "constant_medium.h"
+#include "triangle.h"
 
 void bouncing_spheres() {
     hittable_list world;
@@ -367,7 +368,7 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
     cam.max_depth         = max_depth;
     cam.background        = color(0,0,0);
 
-    cam.vfov     = 40;
+    cam.vfov     = 80;
     cam.lookfrom = point3(478, 278, -600);
     cam.lookat   = point3(278, 278, 0);
     cam.vup      = vec3(0,1,0);
@@ -377,8 +378,99 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
     cam.render(world);
 }
 
+void rainScene(int image_width, int samples_per_pixel, int max_depth) {
+    auto ground = make_shared<lambertian>(color(0.48, 0.83, 0.53));
+
+    hittable_list world;
+
+    for (int i = 0; i < 50; i++) {
+        auto x = random_double(-100, -90);
+        auto y = random_double(5, 30);
+        auto z = random_double(-100, -90);
+        auto radius = random_double(0.2, 0.5);
+        world.add(make_shared<sphere>(point3(x, y, z), point3(x, y - 2, z), radius, make_shared<dielectric>(1.33333333)));
+    }
+
+    auto light = make_shared<diffuse_light>(color(4, 4, 4));
+    world.add(make_shared<sphere>(point3(0, 30, 0), 0.3, light));
+
+    camera cam;
+
+    cam.aspect_ratio      = 1.0;
+    cam.image_width       = image_width;
+    cam.samples_per_pixel = samples_per_pixel;
+    cam.max_depth         = max_depth;
+    cam.background        = color(.529, .808, .922);
+
+    cam.vfov     = 90;
+    cam.lookfrom = point3(0,0,0);
+    cam.lookat   = point3(0, 0, -1);
+    cam.vup      = vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world);
+    //currently is still all blue
+}
+
+void triangle_example() {
+    hittable_list world;
+
+    // Ground
+    world.add(make_shared<sphere>(point3(0,-1000, -1), 1000, make_shared<lambertian>(color(0.8, 0.8, 0.6))));
+
+    // Build a small tetrahedron (4 triangular faces) to show 3D geometry
+    point3 base0(-1.0, -0.5, -3.0);
+    point3 base1( 1.0, -0.5, -3.0);
+    point3 base2( 0.0,  0.8, -3.0);
+    point3 tip(   0.0,  0.2, -1.5); // tip closer to the camera
+
+    auto mat0 = make_shared<lambertian>(color(0.8, 0.2, 0.2));
+    auto mat1 = make_shared<lambertian>(color(0.2, 0.8, 0.2));
+    auto mat2 = make_shared<lambertian>(color(0.2, 0.2, 0.8));
+    auto mat3 = make_shared<lambertian>(color(0.9, 0.9, 0.3));
+
+    hittable_list tetra;
+    // base face
+    tetra.add(make_shared<triangle>(base0, base1, base2, mat0));
+    // three side faces
+    tetra.add(make_shared<triangle>(base0, base1, tip,   mat1));
+    tetra.add(make_shared<triangle>(base1, base2, tip,   mat2));
+    tetra.add(make_shared<triangle>(base2, base0, tip,   mat3));
+
+    // Group the triangles into a BVH for faster intersection
+    world.add(make_shared<bvh_node>(tetra));
+
+    // Add a small emissive sphere above as a light source
+    auto light = make_shared<diffuse_light>(color(6,6,6));
+    world.add(make_shared<sphere>(point3(0.0, 2.5, -2.0), 0.3, light));
+
+    // Add a reflective sphere to show shading and reflections
+    world.add(make_shared<sphere>(point3(-2.0, 0.2, -3.5), 0.5, make_shared<metal>(color(0.8,0.8,0.9), 0.1)));
+
+    camera cam;
+
+    cam.aspect_ratio      = 1.0;
+    cam.image_width       = 600;
+    cam.samples_per_pixel = 300;
+    cam.max_depth         = 50;
+    cam.background        = color(0.05, 0.05, 0.06);
+
+    // Move the camera back and up a bit to get perspective on the tetrahedron
+    cam.vfov     = 40;
+    cam.lookfrom = point3(3.0, 1.5, 1.0);
+    cam.lookat   = point3(0.0, 0.0, -2.5);
+    cam.vup      = vec3(0,1,0);
+
+    // Small aperture for shallow depth of field
+    cam.defocus_angle = 0.1;
+    cam.focus_dist = (cam.lookfrom - cam.lookat).length();
+
+    cam.render(world);
+}
+
 int main() {
-    switch (10) {
+    switch (12) {
         case 1: bouncing_spheres();  break;
         case 2: checkered_spheres(); break;
         case 3: earth();             break;
@@ -388,6 +480,8 @@ int main() {
         case 7: cornell_box();       break;
         case 8: cornell_smoke();     break;
         case 9:  final_scene(800, 1000, 40); break; //super high res
-        case 10: final_scene(400,   250,  4); break; //not as high res
+        case 10: final_scene(400,   500,  20); break; //not as high res
+        case 11: rainScene(1000, 40, 40); break; //TODO
+        case 12: triangle_example(); break;
     }
 }
