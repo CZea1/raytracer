@@ -379,38 +379,83 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
 }
 
 void rainScene(int image_width, int samples_per_pixel, int max_depth) {
-    auto ground = make_shared<lambertian>(color(0.48, 0.83, 0.53));
-
+    // Still raindrops on a window: dielectric window + droplets attached to its surface
     hittable_list world;
 
-    for (int i = 0; i < 50; i++) {
-        auto x = random_double(-100, -90);
-        auto y = random_double(5, 30);
-        auto z = random_double(-100, -90);
-        auto radius = random_double(0.2, 0.5);
-        world.add(make_shared<sphere>(point3(x, y, z), point3(x, y - 2, z), radius, make_shared<dielectric>(1.33333333)));
-    }
-
-    auto light = make_shared<diffuse_light>(color(4, 4, 4));
-    world.add(make_shared<sphere>(point3(0, 30, 0), 0.3, light));
-
+    // Camera: very close to the window, shallow depth of field to blur background
     camera cam;
-
     cam.aspect_ratio      = 1.0;
     cam.image_width       = image_width;
     cam.samples_per_pixel = samples_per_pixel;
     cam.max_depth         = max_depth;
-    cam.background        = color(.529, .808, .922);
+    cam.background        = color(.06, .07, .09);
 
-    cam.vfov     = 90;
-    cam.lookfrom = point3(0,0,0);
-    cam.lookat   = point3(0, 0, -1);
+    cam.vfov     = 45;
+    // camera slightly in front of window at origin looking down -Z
+    cam.lookfrom = point3(0.0, 0.0, 0.08);
+    cam.lookat   = point3(0.0, 0.0, -1.0);
     cam.vup      = vec3(0,1,0);
+    // small aperture, focus on the window plane (~0.5 units away)
+    cam.defocus_angle = 0.06;
+    cam.focus_dist = 0.5;
 
-    cam.defocus_angle = 0;
+    // Background scene (distant) to be seen through window
+    auto far_mat = make_shared<lambertian>(color(0.5, 0.5, 0.6));
+    world.add(make_shared<sphere>(point3(-6.0, -1005.0, -50.0), 1000.0, far_mat)); // distant ground
+    world.add(make_shared<sphere>(point3(3.0, 0.5, -12.0), 2.0, make_shared<lambertian>(color(0.7,0.2,0.2))));
+    world.add(make_shared<sphere>(point3(-3.5, 0.6, -10.5), 1.2, make_shared<metal>(color(0.6,0.65,0.7), 0.05)));
 
+    // Thin glass pane (the window) at z = -0.5, using a dielectric material
+    auto glass = make_shared<dielectric>(1.52);
+    // Quad: origin at top-left of window in world coords. We'll center on camera
+    point3 Q(-2.0, -1.2, -0.5);
+    vec3 u(4.0, 0.0, 0.0); // span in X
+    vec3 v(0.0, 2.4, 0.0); // span in Y
+    world.add(make_shared<quad>(Q, u, v, glass));
+
+    // Create droplets on the window surface: small dielectric spheres close to the quad
+    hittable_list drops;
+    const int num_droplets = 700;
+    for (int i = 0; i < num_droplets; ++i) {
+        // sample across the quad area
+        auto sx = random_double(0.0, 1.0);
+        auto sy = random_double(0.0, 1.0);
+        auto px = Q.x() + sx * u.x() + sy * v.x();
+        auto py = Q.y() + sx * u.y() + sy * v.y();
+        auto pz = Q.z() + random_double(-0.012, 0.012); // small jitter in front/behind surface
+
+        auto r = random_double(0.01, 0.035);
+        drops.add(make_shared<sphere>(point3(px, py, pz), r, make_shared<dielectric>(1.33333333)));
+    }
+
+    // Add some faint highlights/streaks using thin metal triangles to simulate dried trails
+    auto streak_mat = make_shared<metal>(color(0.95, 0.98, 1.0), 0.18);
+    const int num_trails = 220;
+    for (int i = 0; i < num_trails; ++i) {
+        double sx = random_double(0.05, 0.95);
+        double sy = random_double(0.05, 0.95);
+        double length = random_double(0.06, 0.3);
+        double w = random_double(0.002, 0.006);
+
+        point3 center(Q.x() + sx*u.x() + sy*v.x(), Q.y() + sx*u.y() + sy*v.y(), Q.z());
+        // trails go downward in screen space (world -Y)
+        point3 p0 = center;
+        point3 p1 = center + vec3(0.0, -length, 0.0) - vec3(w,0,0);
+        point3 p2 = center + vec3(0.0, -length, 0.0) + vec3(w,0,0);
+        drops.add(make_shared<triangle>(p0, p1, p2, streak_mat));
+    }
+
+    // Add the drops/trails as BVH for performance
+    world.add(make_shared<bvh_node>(drops));
+
+    // Soft key light to the upper-right, behind camera, to add highlights on droplets
+    world.add(make_shared<sphere>(point3(1.0, 3.0, 1.0), 0.6, make_shared<diffuse_light>(color(4.0,4.2,4.5))));
+
+    // Small reflected object behind the window for visual interest
+    world.add(make_shared<sphere>(point3(1.2, -0.2, -6.0), 0.7, make_shared<metal>(color(0.7,0.75,0.8), 0.05)));
+
+    // Render the still close-up window with droplets
     cam.render(world);
-    //currently is still all blue
 }
 
 void triangle_example() {
@@ -470,7 +515,7 @@ void triangle_example() {
 }
 
 int main() {
-    switch (12) {
+    switch (11) {
         case 1: bouncing_spheres();  break;
         case 2: checkered_spheres(); break;
         case 3: earth();             break;
