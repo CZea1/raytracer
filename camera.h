@@ -27,15 +27,49 @@ class camera {
 
         std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
 
+        // Adaptive sampling parameters
+        const int batch_size = 4;            // samples per inner batch
+        int min_samples = (samples_per_pixel < 64) ? samples_per_pixel : 64; // ensure a reasonable minimum
+        const double lum_variance_threshold = 1e-6; // stricter luminance variance threshold to stop
+
         for (int j = 0; j < image_height; j++) {
             std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
             for (int i = 0; i < image_width; i++) {
-                color pixel_color(0,0,0);
-                for (int sample = 0; sample < samples_per_pixel; sample++) {
-                    ray r = get_ray(i, j);
-                    pixel_color += ray_color(r, max_depth, world);
+                // Online accumulation for color and luminance variance (Welford's algorithm)
+                color sum_color(0,0,0);
+                double lum_mean = 0.0;
+                double lum_M2 = 0.0;
+                int count = 0;
+
+                // Sample until we reach the maximum samples or variance criterion
+                while (count < samples_per_pixel) {
+                    int this_batch = std::min(batch_size, samples_per_pixel - count);
+                    for (int s = 0; s < this_batch; s++) {
+                        ray r = get_ray(i, j);
+                        color samp = ray_color(r, max_depth, world);
+                        sum_color += samp;
+
+                        // Compute sample luminance (linear)
+                        double lum = 0.2126*samp.x() + 0.7152*samp.y() + 0.0722*samp.z();
+
+                        count++;
+                        double delta = lum - lum_mean;
+                        lum_mean += delta / count;
+                        double delta2 = lum - lum_mean;
+                        lum_M2 += delta * delta2;
+                    }
+
+                    // After the minimum samples, check whether variance is below threshold
+                    if (count >= min_samples) {
+                        double variance = (count > 1) ? (lum_M2 / (count - 1)) : 0.0;
+                        if (variance <= lum_variance_threshold)
+                            break;
+                    }
                 }
-                write_color(std::cout, pixel_samples_scale * pixel_color);
+
+                // Compute final averaged color for this pixel
+                color avg_color = (1.0 / double(count)) * sum_color;
+                write_color(std::cout, avg_color);
             }
         }
 

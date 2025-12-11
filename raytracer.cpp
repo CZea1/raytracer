@@ -343,8 +343,41 @@ void final_scene(int image_width, int samples_per_pixel, int max_depth) {
 
     auto emat = make_shared<lambertian>(make_shared<image_texture>("assets/earthmap.jpg"));
     world.add(make_shared<sphere>(point3(400,200,400), 100, emat));
-    auto pertext = make_shared<noise_texture>(0.2);
-    world.add(make_shared<sphere>(point3(220,280,300), 80, make_shared<lambertian>(pertext)));
+    // auto pertext = make_shared<noise_texture>(0.2);
+    // world.add(make_shared<sphere>(point3(220,280,300), 80, make_shared<lambertian>(pertext)));
+
+    auto tri_mat = make_shared<lambertian>(color(0.8, 0.3, 0.3));
+    
+    // triangular prism
+    point3 b0(228, 200, -100);
+    point3 b1(328, 200, -150);
+    point3 b2(278, 260, -50);
+
+    // Compute a thickness along the triangle normal and create top-face vertices
+    vec3 e1 = b1 - b0;
+    vec3 e2 = b2 - b0;
+    vec3 tri_normal = unit_vector(cross(e1, e2));
+    double thickness = 40.0; // thickness of the prism
+
+    point3 t0 = b0 + thickness * tri_normal;
+    point3 t1 = b1 + thickness * tri_normal;
+    point3 t2 = b2 + thickness * tri_normal;
+
+    // Group faces for the prism
+    auto prism = make_shared<hittable_list>();
+
+    // Caps (two triangles)
+    prism->add(make_shared<triangle>(b0, b1, b2, tri_mat));
+    // Top cap; order vertices so outward normal points away from outside
+    prism->add(make_shared<triangle>(t0, t2, t1, tri_mat));
+
+    // Side faces (three quads). Each quad is defined by a corner and two edge vectors.
+    prism->add(make_shared<quad>(b0, b1 - b0, t0 - b0, tri_mat)); // side between b0-b1 and t0-t1
+    prism->add(make_shared<quad>(b1, b2 - b1, t1 - b1, tri_mat)); // side between b1-b2 and t1-t2
+    prism->add(make_shared<quad>(b2, b0 - b2, t2 - b2, tri_mat)); // side between b2-b0 and t2-t0
+
+    // Add the prism as a BVH node for faster intersection tests
+    world.add(make_shared<bvh_node>(*prism));
 
     hittable_list boxes2;
     auto white = make_shared<lambertian>(color(.73, .73, .73));
@@ -515,7 +548,7 @@ void triangle_example() {
 }
 
 int main() {
-    switch (11) {
+    switch (9) {
         case 1: bouncing_spheres();  break;
         case 2: checkered_spheres(); break;
         case 3: earth();             break;
@@ -524,9 +557,9 @@ int main() {
         case 6: simple_light();      break;
         case 7: cornell_box();       break;
         case 8: cornell_smoke();     break;
-        case 9:  final_scene(800, 1000, 40); break; //super high res
+        case 9:  final_scene(1000, 6000, 60); break; //super high res
         case 10: final_scene(400,   500,  20); break; //not as high res
-        case 11: rainScene(1000, 40, 40); break; //TODO
+        case 11: rainScene(1000, 40, 40); break;
         case 12: triangle_example(); break;
     }
 }
